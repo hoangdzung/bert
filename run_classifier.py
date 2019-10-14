@@ -377,7 +377,7 @@ class ColaProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
-class ColaProcessor(DataProcessor):
+class ParaProcessor(DataProcessor):
   """Processor for the CoLA data set (GLUE version)."""
 
   def get_train_examples(self, data_dir):
@@ -405,7 +405,7 @@ class ColaProcessor(DataProcessor):
       text_b = tokenization.convert_to_unicode(qpair[1])
       # We will add label  as 0, because None is not supported in converting to features
       examples.append(
-          run_classifier.InputExample(guid=guid, text_a=text_a, text_b=text_b, label=0))
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=0))
     return examples
 
   def get_labels(self):
