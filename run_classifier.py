@@ -405,7 +405,7 @@ class ParaProcessor(DataProcessor):
       text_b = tokenization.convert_to_unicode(qpair[1])
       # We will add label  as 0, because None is not supported in converting to features
       examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=0))
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label="0"))
     return examples
 
   def get_labels(self):
@@ -1038,7 +1038,7 @@ def main(_):
       if len(sentence1) == 0: break
       sentence2 = input("Sentence 2:")
       if len(sentence2) == 0: break
-
+      import time;stime=time.time()
       predict_examples = processor.get_predict_examples([(sentence1, sentence2)])
       if FLAGS.use_tpu:
         # TPU requires a fixed batch size for all batches, therefore the number
@@ -1049,7 +1049,7 @@ def main(_):
           predict_examples.append(PaddingInputExample())
 
       # Converting to features 
-      predict_features = convert_examples_to_features(predict_examples, label_list, MAX_SEQ_LENGTH, tokenizer) 
+      predict_features = convert_examples_to_features(predict_examples, label_list, FLAGS.max_seq_length, tokenizer) 
 
       # Input function for prediction
       predict_input_fn = input_fn_builder(predict_features,
@@ -1057,9 +1057,9 @@ def main(_):
                                                 is_training=False,
                                                 drop_remainder=False)
 
-      result = estimator.predict(input_fn=predict_input_fn)
-
-      print(result[0]['probabilities'][1])
+      result = estimator.predict(input_fn=predict_input_fn);print(result)
+      print(time.time()-stime)
+      print(list(result)[0]['probabilities'][1], time.time()-stime)
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
