@@ -75,6 +75,10 @@ flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
 
+flags.DEFINE_bool(
+    "interactive", False,
+    "Whether to use interactive user input.")
+
 flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
 
 flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
@@ -371,6 +375,62 @@ class ColaProcessor(DataProcessor):
         label = tokenization.convert_to_unicode(line[1])
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+    return examples
+
+class ColaProcessor(DataProcessor):
+  """Processor for the CoLA data set (GLUE version)."""
+
+  def get_train_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "test")
+    
+  def get_predict_examples(self, sentence_pairs):
+    """Given question pairs, conevrting to list of InputExample"""
+    examples = []
+    for (i, qpair) in enumerate(sentence_pairs):
+      guid = "predict-%d" % (i)
+      # converting questions to utf-8 and creating InputExamples
+      text_a = tokenization.convert_to_unicode(qpair[0])
+      text_b = tokenization.convert_to_unicode(qpair[1])
+      # We will add label  as 0, because None is not supported in converting to features
+      examples.append(
+          run_classifier.InputExample(guid=guid, text_a=text_a, text_b=text_b, label=0))
+    return examples
+
+  def get_labels(self):
+    """See base class."""
+    return ["0", "1"]
+
+  def _create_examples(self, lines, set_type):
+    """See base class."""
+    return ["0", "1"]
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      if i == 0 or len(line)!=6:
+        continue
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line[3])
+      text_b = tokenization.convert_to_unicode(line[4])
+      if set_type == "test":
+        label = "0"
+      else:
+        label = tokenization.convert_to_unicode(line[5])
+      examples.append(
+          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
     return examples
 
 
@@ -925,7 +985,7 @@ def main(_):
         tf.logging.info("  %s = %s", key, str(result[key]))
         writer.write("%s = %s\n" % (key, str(result[key])))
 
-  if FLAGS.do_predict:
+  if FLAGS.do_predict and not FLAGS.interactive:
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
     num_actual_predict_examples = len(predict_examples)
     if FLAGS.use_tpu:
@@ -971,6 +1031,34 @@ def main(_):
         num_written_lines += 1
     assert num_written_lines == num_actual_predict_examples
 
+  if FLAGS.do_predict and FLAGS.interactive:
+    while(True):
+      sentence1 = input("Sentence 1:")
+      if len(sentence1) == 0: break
+      sentence2 = input("Sentence 2:")
+      if len(sentence2) == 0: break
+
+      predict_examples = processor.get_predict_examples([(sentence1, sentence2)])
+      if FLAGS.use_tpu:
+        # TPU requires a fixed batch size for all batches, therefore the number
+        # of examples must be a multiple of the batch size, or else examples
+        # will get dropped. So we pad with fake examples which are ignored
+        # later on.
+        while len(predict_examples) % FLAGS.predict_batch_size != 0:
+          predict_examples.append(PaddingInputExample())
+
+      # Converting to features 
+      predict_features = convert_examples_to_features(predict_examples, label_list, MAX_SEQ_LENGTH, tokenizer) 
+
+      # Input function for prediction
+      predict_input_fn = input_fn_builder(predict_features,
+                                                seq_length=FLAGS.max_seq_length,
+                                                is_training=False,
+                                                drop_remainder=False)
+
+      result = estimator.predict(input_fn=predict_input_fn)
+
+      print(result[0]['probabilities'][1])
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
